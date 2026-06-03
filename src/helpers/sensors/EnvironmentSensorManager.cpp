@@ -113,6 +113,50 @@ static Adafruit_VL53L0X VL53L0X;
 static RAK12035_SoilMoisture RAK12035;
 #endif
 
+#if ENV_INCLUDE_RAK12032
+#define TELEM_RAK12032_ADDRESS 0x1D      // RAK12032 (ADXL313) accelerometer I2C address; alt is 0x53
+#define RAK12032_LSB_PER_G     256.0f    // ADXL313 sensitivity at the +-2g range below
+#include <SparkFunADXL313.h>
+static ADXL313 ADXL313_sensor;
+
+// Orientation relative to lying flat on a desk, derived from which axis gravity (~1g) points along.
+// Codes: 0=straight up (flat) 1=left side 2=right side 3=forward 4=back 5=upside down, 255=indeterminate.
+// NOTE: the axis->direction mapping depends on how the module is physically mounted; flip the
+// signs/cases below after a bench test if a direction comes out wrong.
+static uint8_t accelOrientationCode(float gx, float gy, float gz) {
+  float ax = fabsf(gx), ay = fabsf(gy), az = fabsf(gz);
+  if (az >= ax && az >= ay) {
+    if (az < 0.6f) return 255;        // tilted between faces, not clearly resting on one
+    return gz >= 0 ? 0 : 5;           // z up = flat/straight up, z down = upside down
+  } else if (ax >= ay) {
+    if (ax < 0.6f) return 255;
+    return gx >= 0 ? 2 : 1;           // +x = right side, -x = left side
+  } else {
+    if (ay < 0.6f) return 255;
+    return gy >= 0 ? 3 : 4;           // +y = forward, -y = back
+  }
+}
+
+static const char* accelOrientationName(float gx, float gy, float gz) {
+  switch (accelOrientationCode(gx, gy, gz)) {
+    case 0:  return "straight up";
+    case 1:  return "left side";
+    case 2:  return "right side";
+    case 3:  return "forward";
+    case 4:  return "back";
+    case 5:  return "upside down";
+    default: return "in-between";
+  }
+}
+
+// Format a g-value as a signed fixed-point string (e.g. "-0.983") without needing printf float support.
+static void fmt_g(char* out, size_t n, float v) {
+  int mg = (int)(v * 1000.0f + (v >= 0 ? 0.5f : -0.5f));
+  bool neg = mg < 0; if (neg) mg = -mg;
+  snprintf(out, n, "%s%d.%03d", neg ? "-" : "", mg / 1000, mg % 1000);
+}
+#endif
+
 #if ENV_INCLUDE_GPS && defined(RAK_BOARD) && !defined(RAK_WISMESH_TAG)
 #define RAK_WISBLOCK_GPS
 #endif
@@ -354,11 +398,43 @@ bool EnvironmentSensorManager::begin() {
   }
   #endif
 
+  #if ENV_INCLUDE_RAK12032
+  if (ADXL313_sensor.begin(TELEM_RAK12032_ADDRESS, *TELEM_WIRE)) {
+    ADXL313_sensor.setRange(ADXL313_RANGE_2_G);   // +-2g: gravity (1g) never saturates
+    ADXL313_sensor.measureModeOn();
+    RAK12032_initialized = true;
+    MESH_DEBUG_PRINTLN("Found sensor RAK12032 (ADXL313) at address: %02X", TELEM_RAK12032_ADDRESS);
+  } else {
+    RAK12032_initialized = false;
+    MESH_DEBUG_PRINTLN("RAK12032 (ADXL313) was not found at I2C address %02X", TELEM_RAK12032_ADDRESS);
+  }
+  #endif
+
   return true;
 }
 
 bool EnvironmentSensorManager::querySensors(uint8_t requester_permissions, CayenneLPP& telemetry) {
   next_available_channel = TELEM_CHANNEL_SELF + 1;
+
+  #if ENV_INCLUDE_RAK12032
+  // RAK12032 (ADXL313) orientation. Reported UNGATED (sent to everyone, like battery) and
+  // encoded as 'temperature'-type channels because the MeshCore app renders temperature but
+  // NOT the LPP accelerometer (113) / digital-input types. The values are not temperatures:
+  //   ch2 = X (g), ch3 = Y (g), ch4 = Z (g), ch5 = orientation code (0-5; 255 = in-between).
+  //   orientation: 0=straight up(flat) 1=left 2=right 3=forward 4=back 5=upside down
+  if (RAK12032_initialized) {
+    if (ADXL313_sensor.dataReady()) ADXL313_sensor.readAccel();
+    float gx = ADXL313_sensor.x / RAK12032_LSB_PER_G;
+    float gy = ADXL313_sensor.y / RAK12032_LSB_PER_G;
+    float gz = ADXL313_sensor.z / RAK12032_LSB_PER_G;
+    telemetry.addTemperature(next_available_channel++, gx);  // ch2 = X
+    telemetry.addTemperature(next_available_channel++, gy);  // ch3 = Y
+    telemetry.addTemperature(next_available_channel++, gz);  // ch4 = Z
+    telemetry.addTemperature(next_available_channel++, (float)accelOrientationCode(gx, gy, gz)); // ch5 = orientation
+    // Also include the proper LPP accelerometer in case a future app build renders it (harmless).
+    telemetry.addAccelerometer(TELEM_CHANNEL_SELF, gx, gy, gz);
+  }
+  #endif
 
   if (requester_permissions & TELEM_PERM_LOCATION && gps_active) {
     telemetry.addGPS(TELEM_CHANNEL_SELF, node_lat, node_lon, node_altitude); // allow lat/lon via telemetry even if no GPS is detected
@@ -535,6 +611,7 @@ bool EnvironmentSensorManager::querySensors(uint8_t requester_permissions, Cayen
         #endif
       }
     #endif
+
   }
   return true;
 }
@@ -545,6 +622,9 @@ int EnvironmentSensorManager::getNumSettings() const {
   #if ENV_INCLUDE_GPS
     if (gps_detected) settings++;  // only show GPS setting if GPS is detected
   #endif
+  #if ENV_INCLUDE_RAK12032
+    if (RAK12032_initialized) settings += 4;  // accel_x, accel_y, accel_z, orientation
+  #endif
   return settings;
 }
 
@@ -553,6 +633,14 @@ const char* EnvironmentSensorManager::getSettingName(int i) const {
   #if ENV_INCLUDE_GPS
     if (gps_detected && i == settings++) {
       return "gps";
+    }
+  #endif
+  #if ENV_INCLUDE_RAK12032
+    if (RAK12032_initialized) {
+      if (i == settings++) return "accel_x";
+      if (i == settings++) return "accel_y";
+      if (i == settings++) return "accel_z";
+      if (i == settings++) return "orientation";
     }
   #endif
   // convenient way to add params (needed for some tests)
@@ -565,6 +653,28 @@ const char* EnvironmentSensorManager::getSettingValue(int i) const {
   #if ENV_INCLUDE_GPS
     if (gps_detected && i == settings++) {
       return gps_active ? "1" : "0";
+    }
+  #endif
+  #if ENV_INCLUDE_RAK12032
+    if (RAK12032_initialized) {
+      int idx = i - settings;   // 0..3 within the accel block
+      if (idx >= 0 && idx <= 3) {
+        static char buf[40];
+        if (ADXL313_sensor.dataReady()) ADXL313_sensor.readAccel();
+        float gx = ADXL313_sensor.x / RAK12032_LSB_PER_G;
+        float gy = ADXL313_sensor.y / RAK12032_LSB_PER_G;
+        float gz = ADXL313_sensor.z / RAK12032_LSB_PER_G;
+        switch (idx) {
+          case 0: fmt_g(buf, sizeof(buf), gx); return buf;
+          case 1: fmt_g(buf, sizeof(buf), gy); return buf;
+          case 2: fmt_g(buf, sizeof(buf), gz); return buf;
+          case 3: snprintf(buf, sizeof(buf), "%u (%s)",
+                    (unsigned)accelOrientationCode(gx, gy, gz),
+                    accelOrientationName(gx, gy, gz));
+                  return buf;
+        }
+      }
+      settings += 4;
     }
   #endif
   // convenient way to add params ...

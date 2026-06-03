@@ -1,3 +1,7 @@
+> **Fork note:** This fork adds **RAK12032 (ADXL313) accelerometer orientation** to the RAK3401 1W repeater — read `accel_x/y/z` and a human-readable orientation (e.g. `5 (upside down)`) from the Repeater Admin console to tell if a node has been knocked over. See **[docs/RAK12032_ACCELEROMETER.md](docs/RAK12032_ACCELEROMETER.md)**.
+>
+> ![sensor list orientation readout](docs/images/rak12032-orientation-cli.jpg)
+
 ## About MeshCore
 
 MeshCore is a lightweight, portable C++ library that enables multi-hop packet routing for embedded projects using LoRa and other packet radios. It is designed for developers who want to create resilient, decentralized communication networks that work without the internet.
