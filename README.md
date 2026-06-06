@@ -1,9 +1,12 @@
 # MeshCore — RAK 1W / RAK4631 Repeater with RAK12032 Accelerometer + Calibration
 
-A fork of [MeshCore](https://github.com/meshcore-dev/MeshCore) that adds 3-axis
-accelerometer support (orientation + a `calibrate accel` command) to WisBlock repeater
-builds, so you can tell how a node is sitting — and detect if it has been knocked over —
-straight from the **Repeater Admin** console in the MeshCore app (or over USB serial).
+A fork of [MeshCore](https://github.com/meshcore-dev/MeshCore) that adds RAK12032 (ADXL313)
+accelerometer + orientation support to WisBlock repeaters. It exposes `sensor get orientation`
+and `accel_x/y/z`, plus a `calibrate accel` command (rotation-based, persists across reboot),
+so you can see how a node is sitting — or whether it's been knocked over — right from the
+**Repeater CLI / Admin** console (or over USB serial). Ready-to-build envs ship for both the
+**RAK3401 1W** (`RAK_3401_repeater`) and the **RAK4631** (`RAK_4631_repeater_accel`) — same
+shared code, you just slap on the RAK12032 sensor.
 
 ![sensor list showing accel_x/y/z and orientation in the Repeater Admin console](docs/images/rak12032-orientation-cli.jpg)
 
