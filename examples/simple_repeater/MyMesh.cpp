@@ -904,8 +904,8 @@ MyMesh::MyMesh(mesh::MainBoard &board, mesh::Radio &radio, mesh::MillisecondCloc
 
   _prefs.adc_multiplier = 0.0f; // 0.0f means use default board multiplier
 
-  // RAK12032 accelerometer calibration defaults (0 = uncalibrated / no correction)
-  _prefs.accel_off_x = _prefs.accel_off_y = _prefs.accel_off_z = 0;
+  // RAK12032 accelerometer calibration defaults (0 = uncalibrated / no rotation)
+  _prefs.accel_ref_x = _prefs.accel_ref_y = _prefs.accel_ref_z = 0;
 
 #if defined(USE_SX1262) || defined(USE_SX1268)
 #ifdef SX126X_RX_BOOSTED_GAIN
@@ -927,7 +927,7 @@ void MyMesh::begin(FILESYSTEM *fs) {
   // load persisted prefs
   _cli.loadPrefs(_fs);
   // re-apply persisted accelerometer calibration (sensors.begin() already ran in main setup)
-  sensors.setAccelCalibration(_prefs.accel_off_x, _prefs.accel_off_y, _prefs.accel_off_z);
+  sensors.setAccelCalibration(_prefs.accel_ref_x, _prefs.accel_ref_y, _prefs.accel_ref_z);
   acl.load(_fs, self_id);
   // TODO: key_store.begin();
   region_map.load(_fs);

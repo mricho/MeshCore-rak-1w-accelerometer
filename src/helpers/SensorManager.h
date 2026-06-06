@@ -28,6 +28,7 @@ public:
   virtual bool calibrateAccelerometer(char* reply_out) { return false; } // fills reply on success
   virtual bool getAccelCalibration(float& x, float& y, float& z) { return false; }
   virtual void setAccelCalibration(float x, float y, float z) { }
+  virtual void clearAccelCalibration() { }
 
   // Helper functions to manage setting by keys (useful in many places ...)
   const char* getSettingByKey(const char* key) {

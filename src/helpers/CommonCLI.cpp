@@ -88,9 +88,9 @@ void CommonCLI::loadPrefsInt(FILESYSTEM* fs, const char* filename) {
     file.read((uint8_t *)&_prefs->adc_multiplier, sizeof(_prefs->adc_multiplier));                 // 166
     file.read((uint8_t *)_prefs->owner_info, sizeof(_prefs->owner_info));                          // 170
     file.read((uint8_t *)&_prefs->rx_boosted_gain, sizeof(_prefs->rx_boosted_gain));              // 290
-    file.read((uint8_t *)&_prefs->accel_off_x, sizeof(_prefs->accel_off_x));                      // 291
-    file.read((uint8_t *)&_prefs->accel_off_y, sizeof(_prefs->accel_off_y));                      // 295
-    file.read((uint8_t *)&_prefs->accel_off_z, sizeof(_prefs->accel_off_z));                      // 299
+    file.read((uint8_t *)&_prefs->accel_ref_x, sizeof(_prefs->accel_ref_x));                      // 291
+    file.read((uint8_t *)&_prefs->accel_ref_y, sizeof(_prefs->accel_ref_y));                      // 295
+    file.read((uint8_t *)&_prefs->accel_ref_z, sizeof(_prefs->accel_ref_z));                      // 299
     // next: 303
 
     // sanitise bad pref values
@@ -122,9 +122,9 @@ void CommonCLI::loadPrefsInt(FILESYSTEM* fs, const char* filename) {
     // sanitise settings
     _prefs->rx_boosted_gain = constrain(_prefs->rx_boosted_gain, 0, 1); // boolean
 
-    _prefs->accel_off_x = constrain(_prefs->accel_off_x, -2.0f, 2.0f);
-    _prefs->accel_off_y = constrain(_prefs->accel_off_y, -2.0f, 2.0f);
-    _prefs->accel_off_z = constrain(_prefs->accel_off_z, -2.0f, 2.0f);
+    _prefs->accel_ref_x = constrain(_prefs->accel_ref_x, -1.5f, 1.5f);
+    _prefs->accel_ref_y = constrain(_prefs->accel_ref_y, -1.5f, 1.5f);
+    _prefs->accel_ref_z = constrain(_prefs->accel_ref_z, -1.5f, 1.5f);
 
     file.close();
   }
@@ -186,9 +186,9 @@ void CommonCLI::savePrefs(FILESYSTEM* fs) {
     file.write((uint8_t *)&_prefs->adc_multiplier, sizeof(_prefs->adc_multiplier));                 // 166
     file.write((uint8_t *)_prefs->owner_info, sizeof(_prefs->owner_info));                          // 170
     file.write((uint8_t *)&_prefs->rx_boosted_gain, sizeof(_prefs->rx_boosted_gain));              // 290
-    file.write((uint8_t *)&_prefs->accel_off_x, sizeof(_prefs->accel_off_x));                      // 291
-    file.write((uint8_t *)&_prefs->accel_off_y, sizeof(_prefs->accel_off_y));                      // 295
-    file.write((uint8_t *)&_prefs->accel_off_z, sizeof(_prefs->accel_off_z));                      // 299
+    file.write((uint8_t *)&_prefs->accel_ref_x, sizeof(_prefs->accel_ref_x));                      // 291
+    file.write((uint8_t *)&_prefs->accel_ref_y, sizeof(_prefs->accel_ref_y));                      // 295
+    file.write((uint8_t *)&_prefs->accel_ref_z, sizeof(_prefs->accel_ref_z));                      // 299
     // next: 303
 
     file.close();
@@ -354,11 +354,16 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, char* command, char* re
           *(dp-1) = 0; // remove last CR
         }
       }
+    } else if (memcmp(command, "calibrate accel clear", 21) == 0) {
+      _sensors->clearAccelCalibration();
+      _prefs->accel_ref_x = 0; _prefs->accel_ref_y = 0; _prefs->accel_ref_z = 0;
+      savePrefs();
+      strcpy(reply, "OK - accel calibration cleared");
     } else if (memcmp(command, "calibrate accel", 15) == 0) {
       if (_sensors->calibrateAccelerometer(reply)) {
-        float ox, oy, oz;
-        _sensors->getAccelCalibration(ox, oy, oz);
-        _prefs->accel_off_x = ox; _prefs->accel_off_y = oy; _prefs->accel_off_z = oz;
+        float rx, ry, rz;
+        _sensors->getAccelCalibration(rx, ry, rz);
+        _prefs->accel_ref_x = rx; _prefs->accel_ref_y = ry; _prefs->accel_ref_z = rz;
         savePrefs();
       } else {
         strcpy(reply, "accel not available");

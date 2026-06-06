@@ -413,13 +413,38 @@ bool EnvironmentSensorManager::begin() {
   return true;
 }
 
-// Reads raw accelerometer values and applies the stored software calibration offsets (g).
+// Rotates a measured gravity vector (shortest arc) so the stored calibration reference maps
+// to +Z, then orientation/output are computed in the calibrated frame. No-op if uncalibrated.
+// A pure rotation preserves magnitude, so |g| stays ~1g for every pose.
+void EnvironmentSensorManager::applyAccelCalibration(float& gx, float& gy, float& gz) const {
+  float rx = accel_ref_x, ry = accel_ref_y, rz = accel_ref_z;
+  float rn = sqrtf(rx*rx + ry*ry + rz*rz);
+  if (rn < 1e-3f) return;                 // (0,0,0) => uncalibrated => identity
+  rx /= rn; ry /= rn; rz /= rn;           // normalize reference to a unit vector
+  float s2 = rx*rx + ry*ry;               // sin^2(theta), theta = angle(ref, +Z)
+  if (s2 < 1e-6f) {                       // ref ~ +/-Z
+    if (rz < 0) { gy = -gy; gz = -gz; }   // calibrated upside-down: 180deg about X
+    return;                               // else already up: identity
+  }
+  float c = rz;                           // cos(theta)
+  float s = sqrtf(s2);                    // sin(theta)
+  float kx = ry / s, ky = -rx / s;        // unit axis k = (ref x Z)/|ref x Z|  (kz = 0)
+  float kdotv = kx*gx + ky*gy;            // k . v   (kz = 0)
+  float cx = ky*gz, cy = -kx*gz, cz = kx*gy - ky*gx;   // k x v
+  float nx = gx*c + cx*s + kx*kdotv*(1-c);             // Rodrigues rotation
+  float ny = gy*c + cy*s + ky*kdotv*(1-c);
+  float nz = gz*c + cz*s;                 // kz = 0 => last term drops
+  gx = nx; gy = ny; gz = nz;
+}
+
+// Reads raw accelerometer values and rotates them into the calibrated frame.
 void EnvironmentSensorManager::readAccelG(float& gx, float& gy, float& gz) const {
 #if ENV_INCLUDE_RAK12032
   if (ADXL313_sensor.dataReady()) ADXL313_sensor.readAccel();
-  gx = ADXL313_sensor.x / RAK12032_LSB_PER_G - accel_off_x;
-  gy = ADXL313_sensor.y / RAK12032_LSB_PER_G - accel_off_y;
-  gz = ADXL313_sensor.z / RAK12032_LSB_PER_G - accel_off_z;
+  gx = ADXL313_sensor.x / RAK12032_LSB_PER_G;
+  gy = ADXL313_sensor.y / RAK12032_LSB_PER_G;
+  gz = ADXL313_sensor.z / RAK12032_LSB_PER_G;
+  applyAccelCalibration(gx, gy, gz);
 #else
   gx = gy = gz = 0;
 #endif
@@ -713,8 +738,8 @@ bool EnvironmentSensorManager::setSettingValue(const char* name, const char* val
   return false;  // not supported
 }
 
-// Calibrate to the flat/straight-up posture: average several raw samples, then set the
-// software offsets so a still, flat node reports X~=0, Y~=0, Z~=+1.0g.
+// Capture the current pose as the calibration reference: average several raw samples and
+// store that gravity vector. Reads are then rotated so this pose becomes "straight up".
 bool EnvironmentSensorManager::calibrateAccelerometer(char* reply_out) {
 #if ENV_INCLUDE_RAK12032
   if (!RAK12032_initialized) return false;
@@ -727,14 +752,14 @@ bool EnvironmentSensorManager::calibrateAccelerometer(char* reply_out) {
     sz += ADXL313_sensor.z / RAK12032_LSB_PER_G;
     delay(10);
   }
-  accel_off_x = sx / N - 0.0f;
-  accel_off_y = sy / N - 0.0f;
-  accel_off_z = sz / N - 1.0f;   // target Z = +1g (resting flat)
+  accel_ref_x = sx / N;
+  accel_ref_y = sy / N;
+  accel_ref_z = sz / N;
   char bx[16], by[16], bz[16];
-  fmt_g(bx, sizeof(bx), accel_off_x);
-  fmt_g(by, sizeof(by), accel_off_y);
-  fmt_g(bz, sizeof(bz), accel_off_z);
-  sprintf(reply_out, "OK - accel calibrated (offset %s,%s,%s)", bx, by, bz);
+  fmt_g(bx, sizeof(bx), accel_ref_x);
+  fmt_g(by, sizeof(by), accel_ref_y);
+  fmt_g(bz, sizeof(bz), accel_ref_z);
+  sprintf(reply_out, "OK - accel calibrated (ref %s,%s,%s)", bx, by, bz);
   return true;
 #else
   return false;
@@ -742,12 +767,16 @@ bool EnvironmentSensorManager::calibrateAccelerometer(char* reply_out) {
 }
 
 bool EnvironmentSensorManager::getAccelCalibration(float& x, float& y, float& z) {
-  x = accel_off_x; y = accel_off_y; z = accel_off_z;
+  x = accel_ref_x; y = accel_ref_y; z = accel_ref_z;
   return true;
 }
 
 void EnvironmentSensorManager::setAccelCalibration(float x, float y, float z) {
-  accel_off_x = x; accel_off_y = y; accel_off_z = z;
+  accel_ref_x = x; accel_ref_y = y; accel_ref_z = z;
+}
+
+void EnvironmentSensorManager::clearAccelCalibration() {
+  accel_ref_x = accel_ref_y = accel_ref_z = 0;
 }
 
 #if ENV_INCLUDE_GPS
