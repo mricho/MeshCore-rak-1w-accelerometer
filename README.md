@@ -17,7 +17,6 @@ so every accel build below has the **identical** feature set: `sensor get accel_
 |----------------|----------|------|:-------------:|-------|
 | **`RAK_3401_repeater`** | RAK3401 (nRF52840) | RAK13302 (SX1262 + SKY66122, up to **1W**) | ✅ RAK12032 | The 1W repeater build |
 | **`RAK_4631_repeater_accel`** | RAK4631 (nRF52840) | onboard SX1262 | ✅ RAK12032 | RAK4631 repeater **with** the accelerometer mods |
-| `RAK_4631_repeater` | RAK4631 (nRF52840) | onboard SX1262 | ❌ | Stock upstream repeater (no accel) |
 
 > Want the accelerometer on another nRF52 WisBlock variant? Add an env that sets
 > `-D ENV_INCLUDE_RAK12032=1` and pulls in `sparkfun/SparkFun ADXL313 Arduino Library`,
