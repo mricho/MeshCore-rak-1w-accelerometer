@@ -775,10 +775,6 @@ void EnvironmentSensorManager::setAccelCalibration(float x, float y, float z) {
   accel_ref_x = x; accel_ref_y = y; accel_ref_z = z;
 }
 
-void EnvironmentSensorManager::clearAccelCalibration() {
-  accel_ref_x = accel_ref_y = accel_ref_z = 0;
-}
-
 #if ENV_INCLUDE_GPS
 void EnvironmentSensorManager::initBasicGPS() {
 

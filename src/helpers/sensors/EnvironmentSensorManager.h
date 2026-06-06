@@ -66,5 +66,4 @@ public:
   bool calibrateAccelerometer(char* reply_out) override;
   bool getAccelCalibration(float& x, float& y, float& z) override;
   void setAccelCalibration(float x, float y, float z) override;
-  void clearAccelCalibration() override;
 };

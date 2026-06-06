@@ -354,11 +354,6 @@ void CommonCLI::handleCommand(uint32_t sender_timestamp, char* command, char* re
           *(dp-1) = 0; // remove last CR
         }
       }
-    } else if (memcmp(command, "calibrate accel clear", 21) == 0) {
-      _sensors->clearAccelCalibration();
-      _prefs->accel_ref_x = 0; _prefs->accel_ref_y = 0; _prefs->accel_ref_z = 0;
-      savePrefs();
-      strcpy(reply, "OK - accel calibration cleared");
     } else if (memcmp(command, "calibrate accel", 15) == 0) {
       if (_sensors->calibrateAccelerometer(reply)) {
         float rx, ry, rz;
