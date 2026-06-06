@@ -61,6 +61,7 @@ struct NodePrefs { // persisted to file
   uint8_t rx_boosted_gain; // power settings
   uint8_t path_hash_mode;   // which path mode to use when sending
   uint8_t loop_detect;
+  float accel_off_x, accel_off_y, accel_off_z; // RAK12032 accelerometer calibration (g)
 };
 
 class CommonCLICallbacks {

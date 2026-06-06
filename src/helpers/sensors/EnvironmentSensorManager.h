@@ -29,6 +29,10 @@ protected:
   bool gps_active = false;
   uint32_t gps_update_interval_sec = 1;  // Default 1 second
 
+  // RAK12032 (ADXL313) software calibration offsets (g); corrected = raw - offset
+  float accel_off_x = 0, accel_off_y = 0, accel_off_z = 0;
+  void readAccelG(float& gx, float& gy, float& gz) const;
+
   #if ENV_INCLUDE_GPS
   LocationProvider* _location;
   void start_gps();
@@ -57,4 +61,7 @@ public:
   const char* getSettingName(int i) const override;
   const char* getSettingValue(int i) const override;
   bool setSettingValue(const char* name, const char* value) override;
+  bool calibrateAccelerometer(char* reply_out) override;
+  bool getAccelCalibration(float& x, float& y, float& z) override;
+  void setAccelCalibration(float x, float y, float z) override;
 };

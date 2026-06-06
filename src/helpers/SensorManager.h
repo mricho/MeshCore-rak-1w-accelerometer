@@ -24,6 +24,11 @@ public:
   virtual bool setSettingValue(const char* name, const char* value) { return false; }
   virtual LocationProvider* getLocationProvider() { return NULL; }
 
+  // Accelerometer calibration (only EnvironmentSensorManager w/ RAK12032 implements these)
+  virtual bool calibrateAccelerometer(char* reply_out) { return false; } // fills reply on success
+  virtual bool getAccelCalibration(float& x, float& y, float& z) { return false; }
+  virtual void setAccelCalibration(float x, float y, float z) { }
+
   // Helper functions to manage setting by keys (useful in many places ...)
   const char* getSettingByKey(const char* key) {
     int num = getNumSettings();

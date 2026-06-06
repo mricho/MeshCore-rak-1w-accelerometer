@@ -413,6 +413,18 @@ bool EnvironmentSensorManager::begin() {
   return true;
 }
 
+// Reads raw accelerometer values and applies the stored software calibration offsets (g).
+void EnvironmentSensorManager::readAccelG(float& gx, float& gy, float& gz) const {
+#if ENV_INCLUDE_RAK12032
+  if (ADXL313_sensor.dataReady()) ADXL313_sensor.readAccel();
+  gx = ADXL313_sensor.x / RAK12032_LSB_PER_G - accel_off_x;
+  gy = ADXL313_sensor.y / RAK12032_LSB_PER_G - accel_off_y;
+  gz = ADXL313_sensor.z / RAK12032_LSB_PER_G - accel_off_z;
+#else
+  gx = gy = gz = 0;
+#endif
+}
+
 bool EnvironmentSensorManager::querySensors(uint8_t requester_permissions, CayenneLPP& telemetry) {
   next_available_channel = TELEM_CHANNEL_SELF + 1;
 
@@ -423,10 +435,8 @@ bool EnvironmentSensorManager::querySensors(uint8_t requester_permissions, Cayen
   //   ch2 = X (g), ch3 = Y (g), ch4 = Z (g), ch5 = orientation code (0-5; 255 = in-between).
   //   orientation: 0=straight up(flat) 1=left 2=right 3=forward 4=back 5=upside down
   if (RAK12032_initialized) {
-    if (ADXL313_sensor.dataReady()) ADXL313_sensor.readAccel();
-    float gx = ADXL313_sensor.x / RAK12032_LSB_PER_G;
-    float gy = ADXL313_sensor.y / RAK12032_LSB_PER_G;
-    float gz = ADXL313_sensor.z / RAK12032_LSB_PER_G;
+    float gx, gy, gz;
+    readAccelG(gx, gy, gz);
     telemetry.addTemperature(next_available_channel++, gx);  // ch2 = X
     telemetry.addTemperature(next_available_channel++, gy);  // ch3 = Y
     telemetry.addTemperature(next_available_channel++, gz);  // ch4 = Z
@@ -660,10 +670,8 @@ const char* EnvironmentSensorManager::getSettingValue(int i) const {
       int idx = i - settings;   // 0..3 within the accel block
       if (idx >= 0 && idx <= 3) {
         static char buf[40];
-        if (ADXL313_sensor.dataReady()) ADXL313_sensor.readAccel();
-        float gx = ADXL313_sensor.x / RAK12032_LSB_PER_G;
-        float gy = ADXL313_sensor.y / RAK12032_LSB_PER_G;
-        float gz = ADXL313_sensor.z / RAK12032_LSB_PER_G;
+        float gx, gy, gz;
+        readAccelG(gx, gy, gz);
         switch (idx) {
           case 0: fmt_g(buf, sizeof(buf), gx); return buf;
           case 1: fmt_g(buf, sizeof(buf), gy); return buf;
@@ -703,6 +711,43 @@ bool EnvironmentSensorManager::setSettingValue(const char* name, const char* val
   }
   #endif
   return false;  // not supported
+}
+
+// Calibrate to the flat/straight-up posture: average several raw samples, then set the
+// software offsets so a still, flat node reports X~=0, Y~=0, Z~=+1.0g.
+bool EnvironmentSensorManager::calibrateAccelerometer(char* reply_out) {
+#if ENV_INCLUDE_RAK12032
+  if (!RAK12032_initialized) return false;
+  const int N = 16;
+  float sx = 0, sy = 0, sz = 0;
+  for (int i = 0; i < N; i++) {
+    if (ADXL313_sensor.dataReady()) ADXL313_sensor.readAccel();
+    sx += ADXL313_sensor.x / RAK12032_LSB_PER_G;
+    sy += ADXL313_sensor.y / RAK12032_LSB_PER_G;
+    sz += ADXL313_sensor.z / RAK12032_LSB_PER_G;
+    delay(10);
+  }
+  accel_off_x = sx / N - 0.0f;
+  accel_off_y = sy / N - 0.0f;
+  accel_off_z = sz / N - 1.0f;   // target Z = +1g (resting flat)
+  char bx[16], by[16], bz[16];
+  fmt_g(bx, sizeof(bx), accel_off_x);
+  fmt_g(by, sizeof(by), accel_off_y);
+  fmt_g(bz, sizeof(bz), accel_off_z);
+  sprintf(reply_out, "OK - accel calibrated (offset %s,%s,%s)", bx, by, bz);
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool EnvironmentSensorManager::getAccelCalibration(float& x, float& y, float& z) {
+  x = accel_off_x; y = accel_off_y; z = accel_off_z;
+  return true;
+}
+
+void EnvironmentSensorManager::setAccelCalibration(float x, float y, float z) {
+  accel_off_x = x; accel_off_y = y; accel_off_z = z;
 }
 
 #if ENV_INCLUDE_GPS
